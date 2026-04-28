@@ -1,7 +1,7 @@
 /*********
  * CPU.hdl – CPU del computador Hack, extendida con instrucciones shift
- * Autor 1:
- * Autor 2:
+ * Autor 1: Cristian Bolaños
+ * Autor 2: Jeronimo Contreras
  *
  * Formato de instrucción:
  *   Tipo A   : 0vvv vvvv vvvv vvvv        -> carga v en registro A

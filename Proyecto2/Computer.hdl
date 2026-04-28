@@ -1,7 +1,7 @@
 /*********
  * Computer.hdl – Computador Hack completo
- * Autor 1:
- * Autor 2:
+ * Autor 1: Cristian Bolaños
+ * Autor 2: Jeronimo Contreras
  *
  * Integra ROM32K (programa), CPU y Memory (RAM + Screen + Keyboard).
  *********/

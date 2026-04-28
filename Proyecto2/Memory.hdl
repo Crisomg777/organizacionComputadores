@@ -1,7 +1,7 @@
 /*********
  * Memory.hdl – Memoria del computador Hack
- * Autor 1:
- * Autor 2:
+ * Autor 1: Cristian Bolaños
+ * Autor 2: Jeronimo Contreras
  *
  * Mapa de direcciones (15 bits -> 32K):
  *   0x0000 - 0x3FFF  (0     .. 16383)  -> RAM16K
