@@ -1,7 +1,6 @@
 # Changelog
  
 Todos los cambios relevantes de este proyecto se documentan en este archivo.
-Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
  
 ## [1.0.0] - 2026-04-29
 ### Added
