@@ -2,7 +2,7 @@
  
 Todos los cambios relevantes de este proyecto se documentan en este archivo.
  
-## [1.0.0] - 2026-04-29
+## [1.0.0] - 2026-04-28
 ### Added
 - `Shifter.hdl`: circuito de desplazamiento de un bit (left/right) con salida `result`.
 - `ALU.hdl`: ALU extendida que integra el Shifter cuando `zx=nx=zy=ny=0, no=1`.
@@ -17,7 +17,7 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
   preservando compatibilidad total con el ISA Hack original.
 - Todas las pruebas unitarias de Nand2Tetris (Shifter, ALU, Memory, CPU,
   Computer) pasan en la plataforma web.
-## [0.1.0] - 2026-03-26
+## [0.1.0] - 2026-03-28
 ### Added
 - Estructura inicial del repositorio: `proyecto2/`, `CONTRIBUTORS.md`,
   `CHANGELOG.md`, `LICENSE`, `README.md`.
