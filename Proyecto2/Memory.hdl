@@ -1,0 +1,36 @@
+/*********
+ * Memory.hdl – Memoria del computador Hack
+ * Autor 1:
+ * Autor 2:
+ *
+ * Mapa de direcciones (15 bits -> 32K):
+ *   0x0000 - 0x3FFF  (0     .. 16383)  -> RAM16K
+ *   0x4000 - 0x5FFF  (16384 .. 24575)  -> Screen (RAM8K)
+ *   0x6000           (24576)            -> Keyboard
+ *
+ *  - address[14]        : 0 => RAM,       1 => Screen/Keyboard
+ *  - address[13]        : dentro de la zona alta, 0 => Screen, 1 => Keyboard
+ *********/
+
+CHIP Memory {
+    IN  in[16], load, address[15];
+    OUT out[16];
+
+    PARTS:
+    // Decodificación del dispositivo destino
+    DMux(in=load, sel=address[14], a=loadRAM, b=loadHigh);
+    DMux(in=loadHigh, sel=address[13], a=loadScreen, b=loadKbd);
+
+    // RAM 16K (ignora loadKbd, que no debería ocurrir para direcciones válidas)
+    RAM16K(in=in, load=loadRAM, address=address[0..13], out=ramOut);
+
+    // Screen 8K
+    Screen(in=in, load=loadScreen, address=address[0..12], out=screenOut);
+
+    // Keyboard (solo lectura)
+    Keyboard(out=kbdOut);
+
+    // Selección de salida
+    Mux16(a=screenOut, b=kbdOut, sel=address[13], out=highOut);
+    Mux16(a=ramOut,    b=highOut, sel=address[14], out=out);
+}

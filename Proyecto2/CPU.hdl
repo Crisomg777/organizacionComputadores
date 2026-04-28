@@ -1,0 +1,113 @@
+/*********
+ * CPU.hdl – CPU del computador Hack, extendida con instrucciones shift
+ * Autor 1:
+ * Autor 2:
+ *
+ * Formato de instrucción:
+ *   Tipo A   : 0vvv vvvv vvvv vvvv        -> carga v en registro A
+ *   Tipo C   : 111a cccc ccdd djjj        -> ALU estándar
+ *   Tipo C'  : 101a cccc ccdd djjj        -> SHIFT (extensión)
+ *                 bit 15 = 1  (instrucción C)
+ *                 bit 14 = 0  (marca SHIFT)  <-- diferenciador
+ *                 bit 13 = 1
+ *                 a      = 0 -> opera sobre D
+ *                          1 -> opera sobre A ó M  (mismo 'a' que en Hack)
+ *                 El campo cccccc dentro del shift se interpreta así:
+ *                    c5 (bit 11) = 0 -> shift LEFT,  1 -> shift RIGHT
+ *                    resto de c se ignora
+ *                 ddd y jjj mantienen su semántica Hack.
+ *
+ *   Para el modo SHIFT se configura la ALU con:
+ *       zx=0, nx=0, zy=0, ny=0, no=1  y  f = c5 (dirección)
+ *   La entrada x de la ALU es el operando a desplazar (D, A ó M según a).
+ *********/
+
+CHIP CPU {
+    IN  inM[16],         // valor leído de la RAM[A]
+        instruction[16], // instrucción a ejecutar
+        reset;           // 1 = reiniciar a ROM[0]
+
+    OUT outM[16],        // valor a escribir en la RAM[A]
+        writeM,          // writeM flag
+        addressM[15],    // dirección para RAM
+        pc[15];          // program counter
+
+    PARTS:
+    // -------- Decodificación básica --------
+    // instruction[15] = 1 -> C-instruction (incluye shift). 0 -> A-instruction.
+    Not(in=instruction[15], out=isA);
+    Not(in=isA, out=isC);
+
+    // Shift se identifica por C-instruction con bit14 = 0
+    Not(in=instruction[14], out=notBit14);
+    And(a=isC, b=notBit14, out=isShift);
+
+    // C estándar: isC y bit14 = 1
+    And(a=isC, b=instruction[14], out=isCstd);
+
+    // -------- Registro A --------
+    // Carga A si: (a) es instrucción A, o (b) es instrucción C y d1 (instr[5])
+    Mux16(a=instruction, b=aluOut, sel=isC, out=aIn);
+    Or(a=isA, b=instruction[5], out=loadA);
+    // Para instrucción A, d1 no aplica; isC cubre ambos casos de C (std y shift)
+    ARegister(in=aIn, load=loadA, out=aOut, out[0..14]=addressM);
+
+    // -------- Selección A/M para la ALU --------
+    // Sólo tiene sentido para C-instrucciones. instruction[12] = bit 'a'.
+    And(a=isC, b=instruction[12], out=selAM);
+    Mux16(a=aOut, b=inM, sel=selAM, out=amOut);
+
+    // -------- Registro D --------
+    And(a=isC, b=instruction[4], out=loadD);
+    DRegister(in=aluOut, load=loadD, out=dOut);
+
+    // -------- Control de la ALU --------
+    // En modo C estándar, los 6 bits c provienen de instruction[11..6].
+    // En modo SHIFT, forzamos zx=nx=zy=ny=0, no=1, f = instruction[11] (c5).
+    //
+    // Implementación: cada señal de control se elige entre
+    //   - valor estándar (bits de la instrucción) si !isShift
+    //   - valor de shift si isShift
+    Mux(a=instruction[11], b=false,            sel=isShift, out=ctrlZx);
+    Mux(a=instruction[10], b=false,            sel=isShift, out=ctrlNx);
+    Mux(a=instruction[9],  b=false,            sel=isShift, out=ctrlZy);
+    Mux(a=instruction[8],  b=false,            sel=isShift, out=ctrlNy);
+    Mux(a=instruction[7],  b=instruction[11],  sel=isShift, out=ctrlF);
+    Mux(a=instruction[6],  b=true,             sel=isShift, out=ctrlNo);
+
+    // Operando x de la ALU:
+    //   - Modo estándar: x = D
+    //   - Modo shift   : x = (a==0 ? D : (M ó A según a)), o sea
+    //                    si a=0 -> D; si a=1 -> amOut (A o M según bit previo,
+    //                    aquí coincide con el bit 'a' de shift = instruction[12])
+    //   En ambos modos, x sale de D cuando corresponde; en shift con a=1
+    //   queremos desplazar A o M, por eso elegimos amOut como alternativa.
+    And(a=isShift, b=instruction[12], out=shiftOnAM);
+    Mux16(a=dOut, b=amOut, sel=shiftOnAM, out=aluX);
+
+    // Operando y de la ALU: siempre amOut en modo estándar; ignorado en shift.
+    ALU(x=aluX, y=amOut,
+        zx=ctrlZx, nx=ctrlNx, zy=ctrlZy, ny=ctrlNy, f=ctrlF, no=ctrlNo,
+        out=aluOut, out=outM,
+        zr=zr, ng=ng, result=aluResult);
+
+    // -------- Escritura en M --------
+    And(a=isC, b=instruction[3], out=writeM);
+
+    // -------- Lógica de salto (PC) --------
+    // Salto sólo en C-instructions (estándar o shift). Usamos j1,j2,j3 = instruction[2..0]
+    // con zr/ng calculados sobre la salida de la ALU.
+    Not(in=ng, out=notNg);
+    Not(in=zr, out=notZr);
+    And(a=notNg, b=notZr, out=pos);   // out > 0
+
+    And(a=instruction[0], b=pos, out=jgt);   // j3 + >0
+    And(a=instruction[1], b=zr,  out=jeq);   // j2 + =0
+    And(a=instruction[2], b=ng,  out=jlt);   // j1 + <0
+    Or(a=jgt, b=jeq, out=jge);
+    Or(a=jge, b=jlt, out=jumpRaw);
+    And(a=isC, b=jumpRaw, out=doJump);
+
+    Not(in=doJump, out=doInc);
+    PC(in=aOut, load=doJump, inc=doInc, reset=reset, out[0..14]=pc);
+}

@@ -1,0 +1,76 @@
+/*********
+ * ALU.hdl – ALU (Arithmetic Logic Unit) extendida con Shifter
+ * Autor 1:
+ * Autor 2:
+ *
+ * Funciones estándar Hack:
+ *   0, 1, -1, x, y, !x, !y, -x, -y,
+ *   x+1, y+1, x-1, y-1, x+y, x-y, y-x, x&y, x|y
+ *
+ * Función nueva: SHIFTER
+ *   Si zx=0, nx=0, zy=0, ny=0, no=1 entonces:
+ *       f = 0  ->  shift LEFT  sobre x
+ *       f = 1  ->  shift RIGHT sobre x
+ *   (se desplaza x; y se ignora en este caso)
+ *
+ * El bit expulsado por el extremo correspondiente se expone en 'result'.
+ *********/
+
+CHIP ALU {
+    IN  x[16], y[16],
+        zx, nx, zy, ny, f, no;
+
+    OUT out[16],
+        zr,
+        ng,
+        result;   // bit expulsado por el Shifter
+
+    PARTS:
+    // ---------- Ruta estándar de la ALU ----------
+    // zx
+    Mux16(a=x, b=false, sel=zx, out=zxout);
+    // zy
+    Mux16(a=y, b=false, sel=zy, out=zyout);
+    // nx
+    Not16(in=zxout, out=notx);
+    Mux16(a=zxout, b=notx, sel=nx, out=nxout);
+    // ny
+    Not16(in=zyout, out=noty);
+    Mux16(a=zyout, b=noty, sel=ny, out=nyout);
+    // f: suma o and
+    Add16(a=nxout, b=nyout, out=addout);
+    And16(a=nxout, b=nyout, out=andout);
+    Mux16(a=andout, b=addout, sel=f, out=fout);
+    // no: negar salida
+    Not16(in=fout, out=nfout);
+    Mux16(a=fout, b=nfout, sel=no, out=aluOut);
+
+    // ---------- Ruta del Shifter ----------
+    // direction = f  (0=left, 1=right). Se desplaza 'x'.
+    Shifter(in=x, direction=f, out=shiftOut, result=shiftResult);
+
+    // ---------- Detección del modo Shifter ----------
+    // Modo shifter sii (zx=0 AND nx=0 AND zy=0 AND ny=0 AND no=1)
+    Not(in=zx, out=nzx);
+    Not(in=nx, out=nnx);
+    Not(in=zy, out=nzy);
+    Not(in=ny, out=nny);
+    And(a=nzx, b=nnx, out=s1);
+    And(a=nzy, b=nny, out=s2);
+    And(a=s1,  b=s2, out=s3);
+    And(a=s3,  b=no, out=isShift);
+
+    // ---------- Selección de salida ----------
+    Mux16(a=aluOut, b=shiftOut, sel=isShift,
+          out=out,
+          out[0..7]=low, out[8..15]=high, out[15]=ng);
+
+    // result: sólo tiene sentido en modo shifter; fuera de ese modo = 0
+    And(a=isShift, b=shiftResult, out=result);
+
+    // zr: 1 si out == 0
+    Or8Way(in=low,  out=or1);
+    Or8Way(in=high, out=or2);
+    Or(a=or1, b=or2, out=or3);
+    Not(in=or3, out=zr);
+}
