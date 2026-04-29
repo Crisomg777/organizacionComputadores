@@ -1,0 +1,140 @@
+/*********
+ * design.txt – Diseño de la codificación binaria para las instrucciones
+ *              shift left (<<) y shift right (>>) en el computador Hack.
+ * Autor 1:
+ * Autor 2:
+ *********/
+
+====================================================================
+ 1. MOTIVACIÓN
+====================================================================
+El Hack original sólo define dos formatos de instrucción:
+    A-instruction : 0vvv vvvv vvvv vvvv
+    C-instruction : 111a cccc ccdd djjj
+
+Todas las instrucciones C comienzan con "111". Los bits 14 y 13 están
+"reservados/siempre en 1". Esto deja espacio libre para introducir una
+variante de C-instruction sin romper los programas ya existentes: basta
+con usar una combinación de bits 15..13 distinta de "111" (y distinta
+de 0xxx, que es A-instruction).
+
+Elegimos:
+
+    Shift-instruction : 101a cccc ccdd djjj
+                        |||    |    |   |
+                        ||└─ a: 0 = opera sobre D
+                        ||       1 = opera sobre A o M
+                        |└── bit 13 = 1  (se mantiene en 1 para quedar
+                        |                 dentro del "espacio de C")
+                        └─── bit 14 = 0  (marca SHIFT; es el discriminador)
+
+    bit 15 = 1  -> instrucción tipo C (incluye shift).
+    bit 14 = 0  -> es shift (en lugar de C-estándar, que tiene bit 14 = 1).
+    bit 13 = 1  -> preservado para mantener alineación con el formato C.
+
+De los 6 bits cccccc sólo usamos c5 (bit 11) como DIRECCIÓN:
+    c5 = 0 -> shift LEFT  (<<)
+    c5 = 1 -> shift RIGHT (>>)
+Los bits c4..c0 (instruction[10..6]) se ignoran; por convención se
+ponen en 0 para futura extensión.
+
+Los campos ddd (bits 5..3) y jjj (bits 2..0) conservan su significado
+original de Hack (destino y salto).
+
+====================================================================
+ 2. CAMPO 'a' Y OPERANDO DEL SHIFT
+====================================================================
+    a = 0  -> se desplaza el contenido del registro D
+    a = 1  -> se desplaza el contenido de A (si no se accede a M) o M
+              (si la sintaxis assembler referencia M).
+
+En assembler, el ensamblador decide entre A y M como ya hace en las
+instrucciones C normales: si el operando aparece escrito como M se
+fija a=1 y en el microcontrol se enrutará RAM[A]; si es A se fija
+a=1 con enrutamiento al registro A; si es D, a=0.
+
+====================================================================
+ 3. CONTROL INTERNO (lo que la CPU le dice a la ALU)
+====================================================================
+Cuando la CPU detecta una shift-instruction, fuerza en la ALU:
+
+        zx = 0, nx = 0, zy = 0, ny = 0, no = 1
+        f  = c5   (0 = shift left, 1 = shift right)
+
+Estas son exactamente las condiciones especificadas en el enunciado
+del proyecto 2 para activar el Shifter dentro de la ALU.
+
+La entrada x de la ALU recibe el operando a desplazar (D, A o M),
+seleccionado con el bit 'a' y con la señal writeM habitual.
+
+El bit expulsado se expone en el pin 'result' de la ALU (y de la CPU,
+si se decide exponerlo).
+
+====================================================================
+ 4. TABLAS DE CODIFICACIÓN
+====================================================================
+Leyenda: instrucción binaria = 101 a cccccc ddd jjj
+         (los bits de c4..c0 se ponen en 0 por convención)
+
+---- Shift LEFT  (c5 = 0) ----
+assembler     |  a  | c5 c4..c0 | ddd | jjj | binario
+--------------+-----+-----------+-----+-----+------------------
+D=D<<1        |  0  | 0  00000  | 010 | 000 | 1010 0000 0001 0000
+A=D<<1        |  0  | 0  00000  | 100 | 000 | 1010 0000 0010 0000
+M=D<<1        |  0  | 0  00000  | 001 | 000 | 1010 0000 0000 1000
+AD=D<<1       |  0  | 0  00000  | 110 | 000 | 1010 0000 0011 0000
+AM=D<<1       |  0  | 0  00000  | 101 | 000 | 1010 0000 0010 1000
+MD=D<<1       |  0  | 0  00000  | 011 | 000 | 1010 0000 0001 1000
+AMD=D<<1      |  0  | 0  00000  | 111 | 000 | 1010 0000 0011 1000
+
+D=A<<1        |  1  | 0  00000  | 010 | 000 | 1011 0000 0001 0000
+D=M<<1        |  1  | 0  00000  | 010 | 000 | 1011 0000 0001 0000
+A=A<<1        |  1  | 0  00000  | 100 | 000 | 1011 0000 0010 0000
+M=M<<1        |  1  | 0  00000  | 001 | 000 | 1011 0000 0000 1000
+AM=M<<1       |  1  | 0  00000  | 101 | 000 | 1011 0000 0010 1000
+
+Observación: "D=A<<1" y "D=M<<1" comparten codificación porque el bit
+'a' por sí solo no distingue A de M; lo hace el contexto de acceso a
+memoria (writeM) y el hecho de que para shifts de lectura no se toca
+RAM. En este diseño, cuando a=1 en un shift, la CPU usa amOut que ya
+está multiplexado como en Hack: la diferencia real A vs M sólo es
+significativa si se intenta escribir a M en la misma instrucción.
+
+---- Shift RIGHT (c5 = 1) ----
+assembler     |  a  | c5 c4..c0 | ddd | jjj | binario
+--------------+-----+-----------+-----+-----+------------------
+D=D>>1        |  0  | 1  00000  | 010 | 000 | 1010 1000 0001 0000
+A=D>>1        |  0  | 1  00000  | 100 | 000 | 1010 1000 0010 0000
+M=D>>1        |  0  | 1  00000  | 001 | 000 | 1010 1000 0000 1000
+AD=D>>1       |  0  | 1  00000  | 110 | 000 | 1010 1000 0011 0000
+AM=D>>1       |  0  | 1  00000  | 101 | 000 | 1010 1000 0010 1000
+MD=D>>1       |  0  | 1  00000  | 011 | 000 | 1010 1000 0001 1000
+AMD=D>>1      |  0  | 1  00000  | 111 | 000 | 1010 1000 0011 1000
+
+D=A>>1        |  1  | 1  00000  | 010 | 000 | 1011 1000 0001 0000
+D=M>>1        |  1  | 1  00000  | 010 | 000 | 1011 1000 0001 0000
+A=M>>1        |  1  | 1  00000  | 100 | 000 | 1011 1000 0010 0000
+M=M>>1        |  1  | 1  00000  | 001 | 000 | 1011 1000 0000 1000
+AM=D>>1       |  0  | 1  00000  | 101 | 000 | 1010 1000 0010 1000
+
+====================================================================
+ 5. EJEMPLOS DEL ENUNCIADO
+====================================================================
+  D=M<<1
+    -> 101 1 000000 010 000
+    -> 1011 0000 0001 0000
+    -> 0xB010
+
+  AM=D>>1
+    -> 101 0 100000 101 000
+    -> 1010 1000 0010 1000
+    -> 0xA828
+
+====================================================================
+ 6. COMPATIBILIDAD
+====================================================================
+- Toda A-instruction sigue empezando con bit 15 = 0.      -> intacta.
+- Toda C-instruction clásica empieza con bit 15 = 1 y
+  bit 14 = 1 ("111...").                                   -> intacta.
+- Las shift-instructions empiezan con "101", que no colisiona
+  con ninguna codificación válida previa.
